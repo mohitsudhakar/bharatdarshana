@@ -1,0 +1,17 @@
+project_id = "rmfjhidswnhfojffxylh"
+
+[api]
+port = 9999
+schemas = ["public"]
+
+[db]
+port = 5432
+major_version = 17
+
+[auth]
+
+[studio]
+port = 9999
+
+[auth.email]
+enable_signup = true
