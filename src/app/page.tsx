@@ -116,7 +116,7 @@ interface Toast {
 }
 
 const App: NextPage = () => {
-  const [activeTab, setActiveTab] = useState<'form' | 'search' | 'records'>('form');
+  const [activeTab, setActiveTab] = useState<'form' | 'search' | 'records' | 'analytics'>('form');
   const [invoiceCounter, setInvoiceCounter] = useState(0);
   
   // Form state
@@ -271,7 +271,7 @@ const App: NextPage = () => {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
-        {(['form', 'search', 'records'] as const).map(key => (
+        {(['form', 'search', 'records', 'analytics'] as const).map(key => (
           <button
             key={key}
             onClick={() => { setActiveTab(key); if (key === 'records') handleLoadAll(); else if (key === 'search' && allRecords.length === 0) handleLoadAll(); }}
@@ -282,7 +282,7 @@ const App: NextPage = () => {
               color: activeTab === key ? '#fff' : '#5c3d2e',
             }}
           >
-            {key === 'form' ? '📝 Order Form' : key === 'search' ? '🔍 AI Search' : '📋 All Records'}
+            {key === 'form' ? '📝 Order Form' : key === 'search' ? '🔍 AI Search' : key === 'records' ? '📋 All Records' : '📊 Analytics'}
           </button>
         ))}
       </div>
@@ -519,6 +519,15 @@ const App: NextPage = () => {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* ─── ANALYTICS TAB ─── */}
+      {activeTab === 'analytics' && (
+        <div style={{ background: '#faf6f1', padding: 20, borderRadius: 10, border: '1px solid #e0d5c5' }}>
+          <p style={{ textAlign: 'center', color: '#999', padding: 32 }}>
+            Loading analytics... <a href="/analytics?refresh=1" style={{ color: '#d4a574', marginLeft: 8 }}>Open detailed view</a>
+          </p>
         </div>
       )}
     </div>
