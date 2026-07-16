@@ -322,7 +322,7 @@ const App: NextPage = () => {
         {(['form', 'search', 'records', 'analytics'] as const).map(key => (
           <button
             key={key}
-            onClick={() => { setActiveTab(key); if (key === 'records') handleLoadAll(); else if (key === 'search' && allRecords.length === 0) handleLoadAll(); }}
+            onClick={() => { setActiveTab(key); if (key !== 'form') handleLoadAll(); }}
             style={{
               flex: 1, padding: '10px 8px', border: 'none', borderRadius: 6,
               cursor: 'pointer', fontWeight: 600, fontSize: 13,
