@@ -155,6 +155,7 @@ const App: NextPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastSubmittedId, setLastSubmittedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -312,6 +313,62 @@ const App: NextPage = () => {
     } catch { /* ignore */ }
   };
 
+  const handleEdit = (rec: Submission) => {
+    setEditingId(rec.id);
+    setForm({
+      invoiceNumber: rec.invoice_number || '',
+      bdMembershipNo: rec.bd_membership_no || '',
+      date: rec.date || new Date().toISOString().split('T')[0],
+      customerName: rec.customer_name || '',
+      phone: rec.phone || '',
+      address: rec.address || '',
+      paymentMode: (rec.payment_mode as any) || 'UPI',
+    });
+    // Restore selected items + costs + set counts from selected_books
+    const items: Record<string, number[]> = {};
+    const costs: Record<string, string> = {};
+    const counts: Record<string, number> = {};
+    (rec.selected_books as any[] || []).forEach((b: any) => {
+      if (!items[b.book]) {
+        items[b.book] = [...(b.volumes || [])];
+        counts[b.book] = 0;
+        if (b.cost) costs[b.book] = String(b.cost);
+      }
+      counts[b.book] = (counts[b.book] || 0) + 1;
+    });
+    setSelectedItems(items);
+    setFormCosts(costs);
+    setSetCounts(counts);
+    setActiveTab('form');
+    addToast('✏️ Editing record — click Update to save');
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this record? This cannot be undone.')) return;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    try {
+      const res = await fetch(`${url}/rest/v1/invoice_submissions?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'apikey': key, 'Authorization': `Bearer ${key}` },
+      });
+      if (res.ok) {
+        setAllRecords(prev => prev.filter(r => r.id !== id));
+        addToast('🗑️ Record deleted');
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setForm({ invoiceNumber: '', bdMembershipNo: '', date: new Date().toISOString().split('T')[0], customerName: '', phone: '', address: '', paymentMode: 'UPI' });
+    setSelectedItems({});
+    setFormCosts({});
+    setSetCounts({});
+    addToast('✕ Edit cancelled');
+  };
+
   const handleLogin = () => {
     if (loginForm.username === 'yoga' && loginForm.password === 'yoga123bd') {
       setIsLoggedIn(true);
@@ -337,7 +394,7 @@ const App: NextPage = () => {
     });
     
     const payload: SubmitPayload = {
-      invoice_number: `BD-${invoiceCounter + 1}`,
+      invoice_number: editingId ? form.invoiceNumber : `BD-${invoiceCounter + 1}`,
       bd_membership_no: form.bdMembershipNo || undefined,
       date: form.date || undefined,
       customer_name: form.customerName,
@@ -348,14 +405,42 @@ const App: NextPage = () => {
       selected_books: books,
     };
     
-    const result = await submitForm(payload);
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    let result: { success: boolean; error?: string; id?: string | null };
+    
+    if (editingId && url && key) {
+      // Update existing record
+      const res = await fetch(`${url}/rest/v1/invoice_submissions?id=eq.${encodeURIComponent(editingId)}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': key,
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+      result = res.ok
+        ? { success: true, id: editingId }
+        : { success: false, error: await res.text().catch(() => 'Unknown error') };
+    } else {
+      result = await submitForm(payload);
+    }
+
     if (result.success) {
-      addToast('✓ Order saved successfully');
+      if (editingId) {
+        addToast('✓ Record updated successfully');
+        setEditingId(null);
+      } else {
+        addToast('✓ Order saved successfully');
+        setInvoiceCounter(prev => prev + 1);
+      }
       setForm({ ...form, customerName: '', phone: '', address: '', invoiceNumber: '', bdMembershipNo: '' });
       setSelectedItems({});
       setFormCosts({});
       setSetCounts({});
-      setInvoiceCounter(prev => prev + 1);
       setLastSubmittedId(result.id ?? null);
     } else {
       addToast(`✗ Error: ${result.error}`);
@@ -561,17 +646,29 @@ const App: NextPage = () => {
             </div>
           ))}
 
-          {/* Submit */}
+          {/* Submit / Update / Cancel */}
+          {editingId && (
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              style={{
+                width: '100%', padding: 12, marginTop: 8, border: '1px solid #ccc', borderRadius: 8,
+                background: '#fff', color: '#5c3d2e', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              ✕ Cancel Edit
+            </button>
+          )}
           <button
             type="submit"
             disabled={submitting || Object.keys(selectedItems).length === 0}
             style={{
               width: '100%', padding: 14, marginTop: 12, border: 'none', borderRadius: 8,
-              background: submitting || Object.keys(selectedItems).length === 0 ? '#ccc' : '#d4a574',
+              background: submitting || Object.keys(selectedItems).length === 0 ? '#ccc' : editingId ? '#27ae60' : '#d4a574',
               color: '#fff', fontSize: 16, fontWeight: 700, cursor: submitting || Object.keys(selectedItems).length === 0 ? 'not-allowed' : 'pointer',
             }}
           >
-            {submitting ? 'Saving...' : 'Save Order'}
+            {submitting ? 'Saving...' : editingId ? 'Update Order' : 'Save Order'}
           </button>
           
           {lastSubmittedId && (
@@ -702,6 +799,18 @@ const App: NextPage = () => {
                     >
                       🖨️ Print
                     </a>
+                    <button
+                      onClick={() => handleEdit(rec)}
+                      style={{ color: '#3498db', textDecoration: 'none', fontWeight: 600, fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(rec.id)}
+                      style={{ color: '#e74c3c', textDecoration: 'none', fontWeight: 600, fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    >
+                      🗑️ Delete
+                    </button>
                   </span>
                 </div>
                 <div style={{ fontWeight: 600 }}>{rec.customer_name || '—'}</div>
