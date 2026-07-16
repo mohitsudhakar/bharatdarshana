@@ -139,6 +139,54 @@ const App: NextPage = () => {
   const [searchResults, setSearchResults] = useState<Submission[]>([]);
   const [allRecords, setAllRecords] = useState<Submission[]>([]);
 
+  // Analytics state
+  const [period, setPeriod] = useState<'last_month' | 'last_3m' | 'all'>('last_month');
+
+  function getMonthKey(ts: string): string { return ts.slice(0, 7); }
+  function formatMonth(key: string): string {
+    const [y, m] = key.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(m, 10) - 1]} ${y}`;
+  }
+
+  const filtered = (() => {
+    if (allRecords.length === 0) return [];
+    const now = new Date();
+    let cutoff: Date;
+    if (period === 'last_month') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    else if (period === 'last_3m') cutoff = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    else cutoff = new Date(0);
+    return allRecords.filter(r => new Date(r.created_at) >= cutoff);
+  })();
+
+  const aggregated = (() => {
+    const acc: Record<string, { book: string; volCount: number; sets: number; buyers: number; setsByMonth: Record<string, number> }> = {};
+    filtered.forEach(r => {
+      if (!r.selected_books?.length) return;
+      const seen = new Set<string>();
+      (r.selected_books as any[]).forEach(b => {
+        if (!b.book) return;
+        const vc = b.volumes?.length || 1;
+        const sets = (b.sets && b.sets > 1) ? b.sets : 1;
+        const key = `${b.book}|${vc}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          if (!acc[key]) acc[key] = { book: b.book, volCount: vc, sets: 0, buyers: 0, setsByMonth: {} };
+          acc[key].sets += sets;
+          acc[key].buyers += 1;
+          acc[key].setsByMonth[getMonthKey(r.created_at)] = (acc[key].setsByMonth[getMonthKey(r.created_at)] || 0) + sets;
+        }
+      });
+    });
+    return Object.values(acc).sort((a, b) => b.sets - a.sets);
+  })();
+
+  const totalRevenue = filtered.reduce((s, r) => {
+    return s + ((r.selected_books as any[] || []).reduce(
+      (sub, b) => sub + ((b.cost || 200) * (b.volumes?.length || 1)), 0
+    ));
+  }, 0);
+
   // Toast helper
   const addToast = useCallback((message: string) => {
     const id = Date.now();
@@ -525,9 +573,76 @@ const App: NextPage = () => {
       {/* ─── ANALYTICS TAB ─── */}
       {activeTab === 'analytics' && (
         <div style={{ background: '#faf6f1', padding: 20, borderRadius: 10, border: '1px solid #e0d5c5' }}>
-          <p style={{ textAlign: 'center', color: '#999', padding: 32 }}>
-            Loading analytics... <a href="/analytics?refresh=1" style={{ color: '#d4a574', marginLeft: 8 }}>Open detailed view</a>
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0, color: '#5c3d2e' }}>📊 Sales Analytics</h3>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['last_month', 'last_3m', 'all'] as const).map(p => (
+                <button key={p} onClick={() => setPeriod(p)} style={{
+                  padding: '5px 12px', borderRadius: 6, border: '1px solid #d4a574',
+                  background: period === p ? '#5c3d2e' : '#fff',
+                  color: period === p ? '#fff' : '#5c3d2e',
+                  cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                }}>
+                  {p === 'last_month' ? 'Last Month' : p === 'last_3m' ? 'Last 3 Months' : 'All Time'}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Summary cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 20 }}>
+            <div style={{ background: '#5c3d2e', color: '#fff', padding: 12, borderRadius: 8 }}>
+              <div style={{ fontSize: 11, opacity: 0.8 }}>Invoices</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{filtered.length}</div>
+            </div>
+            <div style={{ background: '#d4a574', color: '#5c3d2e', padding: 12, borderRadius: 8 }}>
+              <div style={{ fontSize: 11, opacity: 0.8 }}>Revenue</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>₹{totalRevenue.toLocaleString('en-IN')}</div>
+            </div>
+            <div style={{ background: '#fff', color: '#5c3d2e', padding: 12, borderRadius: 8, border: '1px solid #e0d5c5' }}>
+              <div style={{ fontSize: 11, color: '#999' }}>Books</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{aggregated.length}</div>
+            </div>
+            <div style={{ background: '#fff', color: '#5c3d2e', padding: 12, borderRadius: 8, border: '1px solid #e0d5c5' }}>
+              <div style={{ fontSize: 11, color: '#999' }}>Sets Sold</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{aggregated.reduce((s, e) => s + e.sets, 0)}</div>
+            </div>
+          </div>
+          {aggregated.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#999', padding: 24 }}>No data for this period.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #5c3d2e' }}>
+                    <th style={{ textAlign: 'left', padding: '8px 6px', color: '#5c3d2e' }}>Set</th>
+                    <th style={{ textAlign: 'right', padding: '8px 6px', color: '#5c3d2e' }}>Buyers</th>
+                    <th style={{ textAlign: 'right', padding: '8px 6px', color: '#5c3d2e' }}>Sets</th>
+                    <th style={{ textAlign: 'right', padding: '8px 6px', color: '#5c3d2e' }}>Revenue</th>
+                    <th style={{ padding: '8px 6px', color: '#5c3d2e', textAlign: 'center' }}>Monthly</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aggregated.map((e, i) => {
+                    const avgCost = e.book.includes('Magazine') ? 1000 : e.book.includes('Special') ? 500 : 200;
+                    const rev = e.sets * e.volCount * avgCost;
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid #e0d5c5' }}>
+                        <td style={{ padding: '8px 6px', fontWeight: 500 }}>{e.book} ({e.volCount} vols)</td>
+                        <td style={{ padding: '8px 6px', textAlign: 'right' }}>{e.buyers}</td>
+                        <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{e.sets}</td>
+                        <td style={{ padding: '8px 6px', textAlign: 'right', color: '#b8860b', fontWeight: 600 }}>₹{rev.toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                          <span style={{ fontSize: 11, color: '#7a6555' }}>
+                            {Object.entries(e.setsByMonth).map(([k, v]) => `${formatMonth(k)} ${v}`).join(' • ')}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
