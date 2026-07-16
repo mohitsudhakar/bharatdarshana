@@ -161,25 +161,21 @@ const App: NextPage = () => {
   })();
 
   const aggregated = (() => {
-    const acc: Record<string, { book: string; volCount: number; sets: number; buyers: number; setsByMonth: Record<string, number> }> = {};
+    const acc: Record<string, { book: string; volCount: number; sets: number; buyers: Set<string>; revenue: number; setsByMonth: Record<string, number> }> = {};
     filtered.forEach(r => {
       if (!r.selected_books?.length) return;
-      const seen = new Set<string>();
       (r.selected_books as any[]).forEach(b => {
         if (!b.book) return;
         const vc = b.volumes?.length || 1;
-        const sets = (b.sets && b.sets > 1) ? b.sets : 1;
         const key = `${b.book}|${vc}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          if (!acc[key]) acc[key] = { book: b.book, volCount: vc, sets: 0, buyers: 0, setsByMonth: {} };
-          acc[key].sets += sets;
-          acc[key].buyers += 1;
-          acc[key].setsByMonth[getMonthKey(r.created_at)] = (acc[key].setsByMonth[getMonthKey(r.created_at)] || 0) + sets;
-        }
+        if (!acc[key]) acc[key] = { book: b.book, volCount: vc, sets: 0, buyers: new Set(), revenue: 0, setsByMonth: {} };
+        acc[key].sets += 1;
+        acc[key].buyers.add(r.id);
+        acc[key].revenue += (b.cost || 200) * vc;
+        acc[key].setsByMonth[getMonthKey(r.created_at)] = (acc[key].setsByMonth[getMonthKey(r.created_at)] || 0) + 1;
       });
     });
-    return Object.values(acc).sort((a, b) => b.sets - a.sets);
+    return Object.values(acc).map(e => ({ ...e, buyers: e.buyers.size })).sort((a, b) => b.sets - a.sets);
   })();
 
   const totalRevenue = filtered.reduce((s, r) => {
@@ -212,7 +208,7 @@ const App: NextPage = () => {
         if (!res.ok) return;
         const rows: any[] = await res.json();
         const last = rows[0]?.invoice_number;
-        setInvoiceCounter(last ? parseInt(last) : 0);
+        setInvoiceCounter(last ? parseInt(last.replace('BD-', '')) || 0 : 0);
       } catch { /* ignore */ }
     })();
   }, []);
@@ -623,11 +619,10 @@ const App: NextPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {aggregated.map((e, i) => {
-                    const avgCost = e.book.includes('Magazine') ? 1000 : e.book.includes('Special') ? 500 : 200;
-                    const rev = e.sets * e.volCount * avgCost;
+                  {aggregated.map(e => {
+                    const rev = e.revenue;
                     return (
-                      <tr key={i} style={{ borderBottom: '1px solid #e0d5c5' }}>
+                      <tr key={`${e.book}|${e.volCount}`} style={{ borderBottom: '1px solid #e0d5c5' }}>
                         <td style={{ padding: '8px 6px', fontWeight: 500 }}>{e.book} ({e.volCount} vols)</td>
                         <td style={{ padding: '8px 6px', textAlign: 'right' }}>{e.buyers}</td>
                         <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{e.sets}</td>
