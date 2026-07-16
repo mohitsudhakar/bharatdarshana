@@ -161,6 +161,7 @@ const App: NextPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Submission[]>([]);
   const [allRecords, setAllRecords] = useState<Submission[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
 
   // Analytics state
   const [period, setPeriod] = useState<'last_week' | 'last_month' | 'last_3m' | 'all'>('last_week');
@@ -287,8 +288,13 @@ const App: NextPage = () => {
 
   const handleLoadAll = async () => {
     if (!isLoggedIn) return;
-    const all = await getSubmissions();
-    setAllRecords(all);
+    setRecordsLoading(true);
+    try {
+      const all = await getSubmissions();
+      setAllRecords(all);
+    } finally {
+      setRecordsLoading(false);
+    }
   };
 
   const handleUpdateStatus = async (id: string, status: string) => {
@@ -309,8 +315,12 @@ const App: NextPage = () => {
       if (res.ok) {
         setAllRecords(prev => prev.map(r => r.id === id ? { ...r, order_status: status } : r));
         addToast(`✓ Marked as ${status}`);
+      } else {
+        addToast(`✗ Update failed: ${res.status}`);
       }
-    } catch { /* ignore */ }
+    } catch(e) {
+      addToast('✗ Update failed');
+    }
   };
 
   const handleEdit = (rec: Submission) => {
@@ -351,13 +361,23 @@ const App: NextPage = () => {
     try {
       const res = await fetch(`${url}/rest/v1/invoice_submissions?id=eq.${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'apikey': key, 'Authorization': `Bearer ${key}` },
+        headers: {
+          'apikey': key,
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
       });
       if (res.ok) {
         setAllRecords(prev => prev.filter(r => r.id !== id));
         addToast('🗑️ Record deleted');
+      } else {
+        const err = await res.text().catch(() => 'Unknown error');
+        addToast(`✗ Delete failed: ${res.status}`);
       }
-    } catch { /* ignore */ }
+    } catch(e) {
+      addToast('✗ Delete failed');
+    }
   };
 
   const handleCancelEdit = () => {
@@ -422,9 +442,14 @@ const App: NextPage = () => {
         },
         body: JSON.stringify(payload),
       });
-      result = res.ok
-        ? { success: true, id: editingId }
-        : { success: false, error: await res.text().catch(() => 'Unknown error') };
+      if (res.ok) {
+        result = { success: true, id: editingId };
+        // Force refresh records list
+        await handleLoadAll();
+      } else {
+        const errText = await res.text().catch(() => 'Unknown error');
+        result = { success: false, error: `${res.status}: ${errText}` };
+      }
     } else {
       result = await submitForm(payload);
     }
@@ -450,6 +475,7 @@ const App: NextPage = () => {
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto', fontFamily: '-apple-system, sans-serif', padding: '20px 16px', position: 'relative' }}>
+      <style>{`@keyframes bdLoad { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       {/* Toast container */}
       <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {toasts.map(t => (
@@ -776,13 +802,33 @@ const App: NextPage = () => {
       {activeTab === 'records' && (
         <div style={{ background: '#faf6f1', padding: 20, borderRadius: 10, border: '1px solid #e0d5c5' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, color: '#5c3d2e' }}>📋 All Records ({allRecords.length})</h3>
-            <button onClick={handleLoadAll} style={{ padding: '6px 14px', background: '#5c3d2e', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-              Refresh
+            <h3 style={{ margin: 0, color: '#5c3d2e' }}>📋 All Records ({recordsLoading ? '...' : allRecords.length})</h3>
+            <button onClick={handleLoadAll} disabled={recordsLoading} style={{ padding: '6px 14px', background: recordsLoading ? '#ccc' : '#5c3d2e', color: '#fff', border: 'none', borderRadius: 6, cursor: recordsLoading ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+              {recordsLoading ? 'Loading...' : 'Refresh'}
             </button>
           </div>
           
-          {allRecords.length === 0 ? (
+          {/* Loading bar */}
+          {recordsLoading && (
+            <div style={{ width: '100%', height: 3, background: '#e0d5c5', borderRadius: 2, marginBottom: 16, overflow: 'hidden' }}>
+              <div style={{ width: '40%', height: '100%', background: '#d4a574', borderRadius: 2, animation: 'bdLoad 1s ease-in-out infinite' }} />
+            </div>
+          )}
+          
+          {/* Skeleton loaders */}
+          {recordsLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ background: '#fff', border: '1px solid #e0d5c5', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+                <div style={{ height: 12, background: '#eee', borderRadius: 4, width: '30%', marginBottom: 8 }} />
+                <div style={{ height: 15, background: '#eee', borderRadius: 4, width: '50%', marginBottom: 6 }} />
+                <div style={{ height: 12, background: '#eee', borderRadius: 4, width: '40%', marginBottom: 8 }} />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <div style={{ height: 16, background: '#eee', borderRadius: 4, width: 60 }} />
+                  <div style={{ height: 16, background: '#eee', borderRadius: 4, width: 50 }} />
+                </div>
+              </div>
+            ))
+          ) : allRecords.length === 0 ? (
             <p style={{ textAlign: 'center', color: '#999', padding: 40 }}>No records yet. Fill out the Order Form first.</p>
           ) : (
             allRecords.map(rec => (
