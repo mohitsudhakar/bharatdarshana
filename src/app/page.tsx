@@ -140,7 +140,7 @@ const App: NextPage = () => {
   const [allRecords, setAllRecords] = useState<Submission[]>([]);
 
   // Analytics state
-  const [period, setPeriod] = useState<'last_month' | 'last_3m' | 'all'>('last_month');
+  const [period, setPeriod] = useState<'last_week' | 'last_month' | 'last_3m' | 'all'>('last_week');
 
   function getMonthKey(ts: string): string { return ts.slice(0, 7); }
   function formatMonth(key: string): string {
@@ -153,7 +153,8 @@ const App: NextPage = () => {
     if (allRecords.length === 0) return [];
     const now = new Date();
     let cutoff: Date;
-    if (period === 'last_month') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    if (period === 'last_week') cutoff = new Date(Date.now() - 7 * 86400000);
+    else if (period === 'last_month') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     else if (period === 'last_3m') cutoff = new Date(now.getFullYear(), now.getMonth() - 3, 1);
     else cutoff = new Date(0);
     return allRecords.filter(r => new Date(r.created_at) >= cutoff);
@@ -576,14 +577,14 @@ const App: NextPage = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
             <h3 style={{ margin: 0, color: '#5c3d2e' }}>📊 Sales Analytics</h3>
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['last_month', 'last_3m', 'all'] as const).map(p => (
+              {(['last_week', 'last_month', 'last_3m', 'all'] as const).map(p => (
                 <button key={p} onClick={() => setPeriod(p)} style={{
                   padding: '5px 12px', borderRadius: 6, border: '1px solid #d4a574',
                   background: period === p ? '#5c3d2e' : '#fff',
                   color: period === p ? '#fff' : '#5c3d2e',
                   cursor: 'pointer', fontSize: 12, fontWeight: 600,
                 }}>
-                  {p === 'last_month' ? 'Last Month' : p === 'last_3m' ? 'Last 3 Months' : 'All Time'}
+                  {p === 'last_week' ? 'Last Week' : p === 'last_month' ? 'Last Month' : p === 'last_3m' ? 'Last 3 Months' : 'All Time'}
                 </button>
               ))}
             </div>
