@@ -118,8 +118,18 @@ interface Toast {
 const App: NextPage = () => {
   const [activeTab, setActiveTab] = useState<'form' | 'search' | 'records' | 'analytics'>('form');
   const [invoiceCounter, setInvoiceCounter] = useState(0);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showLogin, setShowLogin] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return document.cookie.includes('bd_auth=1');
+    }
+    return false;
+  });
+  const [showLogin, setShowLogin] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return !document.cookie.includes('bd_auth=1');
+    }
+    return true;
+  });
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
   
@@ -217,6 +227,15 @@ const App: NextPage = () => {
     })();
   }, []);
 
+  // Re-read auth cookie after hydration
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const authed = document.cookie.includes('bd_auth=1');
+      setIsLoggedIn(authed);
+      setShowLogin(!authed);
+    }
+  }, []);
+
   // Volume selection
   const toggleVolume = (bookLabel: string, volNum: number) => {
     setSelectedItems(prev => {
@@ -268,6 +287,7 @@ const App: NextPage = () => {
       setIsLoggedIn(true);
       setShowLogin(false);
       setLoginError('');
+      document.cookie = 'bd_auth=1; path=/; max-age=86400';
       addToast('✓ Signed in');
     } else {
       setLoginError('Invalid username or password');
