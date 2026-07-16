@@ -16,6 +16,7 @@ interface Submission {
   phone: string | null;
   address: string | null;
   payment_mode: string | null;
+  order_status: string | null;
   selected_books: any[];
   search_vector: string | null;
   created_at: string;
@@ -110,6 +111,7 @@ interface SubmitPayload {
   phone?: string;
   address?: string;
   payment_mode?: string;
+  order_status?: string;
   selected_books: { book: string; volumes: number[]; cost?: number }[];
 }
 
@@ -288,6 +290,28 @@ const App: NextPage = () => {
     setAllRecords(all);
   };
 
+  const handleUpdateStatus = async (id: string, status: string) => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    try {
+      const res = await fetch(`${url}/rest/v1/invoice_submissions?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': key,
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ order_status: status }),
+      });
+      if (res.ok) {
+        setAllRecords(prev => prev.map(r => r.id === id ? { ...r, order_status: status } : r));
+        addToast(`✓ Marked as ${status}`);
+      }
+    } catch { /* ignore */ }
+  };
+
   const handleLogin = () => {
     if (loginForm.username === 'yoga' && loginForm.password === 'yoga123bd') {
       setIsLoggedIn(true);
@@ -320,6 +344,7 @@ const App: NextPage = () => {
       phone: form.phone || undefined,
       address: form.address || undefined,
       payment_mode: form.paymentMode,
+      order_status: 'paid',
       selected_books: books,
     };
     
@@ -680,7 +705,33 @@ const App: NextPage = () => {
                   </span>
                 </div>
                 <div style={{ fontWeight: 600 }}>{rec.customer_name || '—'}</div>
-                {rec.phone && <div style={{ fontSize: 13, color: '#7a6555' }}>{rec.phone}</div>}
+                {rec.phone && <div style={{ fontSize: 13, color: '#7a6555' }}>📞 {rec.phone}</div>}
+                {rec.address && <div style={{ fontSize: 13, color: '#7a6555', marginTop: 2 }}>📍 {rec.address}</div>}
+                <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {rec.payment_mode && (
+                    <span style={{ fontSize: 11, background: '#e8e0d0', padding: '2px 8px', borderRadius: 4, color: '#5c3d2e', fontWeight: 600 }}>
+                      {rec.payment_mode}
+                    </span>
+                  )}
+                  <span style={{
+                    fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+                    background: rec.order_status === 'delivered' ? '#d4edda' : '#fff3cd',
+                    color: rec.order_status === 'delivered' ? '#155724' : '#856404',
+                  }}>
+                    {rec.order_status === 'delivered' ? '✓ Delivered' : rec.order_status || 'paid'}
+                  </span>
+                  {rec.order_status !== 'delivered' && (
+                    <button
+                      onClick={() => handleUpdateStatus(rec.id, 'delivered')}
+                      style={{
+                        fontSize: 11, padding: '2px 8px', border: '1px solid #27ae60', borderRadius: 4,
+                        background: '#fff', color: '#27ae60', cursor: 'pointer', fontWeight: 600,
+                      }}
+                    >
+                      Mark Delivered
+                    </button>
+                  )}
+                </div>
                 <div style={{ marginTop: 6, fontSize: 13 }}>
                   {(rec.selected_books as any[] || []).map((item: any, i: number) => (
                     <span key={i} style={{ background: '#f0e6d8', padding: '2px 8px', borderRadius: 4, marginRight: 4, marginBottom: 2, display: 'inline-block' }}>
