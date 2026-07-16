@@ -14,6 +14,8 @@ interface Submission {
   date: string | null;
   customer_name: string | null;
   phone: string | null;
+  address: string | null;
+  payment_mode: string | null;
   selected_books: any[];
   search_vector: string | null;
   created_at: string;
@@ -106,6 +108,8 @@ interface SubmitPayload {
   date?: string;
   customer_name: string;
   phone?: string;
+  address?: string;
+  payment_mode?: string;
   selected_books: { book: string; volumes: number[]; cost?: number }[];
 }
 
@@ -140,6 +144,8 @@ const App: NextPage = () => {
     date: new Date().toISOString().split('T')[0],
     customerName: '',
     phone: '',
+    address: '',
+    paymentMode: 'UPI' as 'UPI' | 'NEFT' | 'CASH' | 'Cheque' | 'DD' | 'M.O',
   });
   const [selectedItems, setSelectedItems] = useState<Record<string, number[]>>({});
   const [formCosts, setFormCosts] = useState<Record<string, string>>({});
@@ -312,13 +318,15 @@ const App: NextPage = () => {
       date: form.date || undefined,
       customer_name: form.customerName,
       phone: form.phone || undefined,
+      address: form.address || undefined,
+      payment_mode: form.paymentMode,
       selected_books: books,
     };
     
     const result = await submitForm(payload);
     if (result.success) {
       addToast('✓ Order saved successfully');
-      setForm({ ...form, customerName: '', phone: '', invoiceNumber: '', bdMembershipNo: '' });
+      setForm({ ...form, customerName: '', phone: '', address: '', invoiceNumber: '', bdMembershipNo: '' });
       setSelectedItems({});
       setFormCosts({});
       setSetCounts({});
@@ -435,6 +443,38 @@ const App: NextPage = () => {
             value={form.customerName} onChange={v => setForm({ ...form, customerName: v })}
             placeholder="Enter customer name" required
           />
+
+          {/* Address */}
+          <div style={{ width: '100%', marginBottom: 16 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#7a6555', display: 'block', marginBottom: 4 }}>Address</label>
+            <textarea
+              value={form.address}
+              onChange={e => setForm({ ...form, address: e.target.value })}
+              placeholder="Enter customer address"
+              rows={2}
+              style={{
+                width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 6,
+                fontSize: 14, boxSizing: 'border-box', background: '#fff', resize: 'vertical', fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* Payment mode */}
+          <div style={{ width: '100%', marginBottom: 16 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#7a6555', display: 'block', marginBottom: 4 }}>Payment Mode</label>
+            <select
+              value={form.paymentMode}
+              onChange={e => setForm({ ...form, paymentMode: e.target.value as typeof form.paymentMode })}
+              style={{
+                width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 6,
+                fontSize: 14, boxSizing: 'border-box', background: '#fff', cursor: 'pointer',
+              }}
+            >
+              {['UPI', 'NEFT', 'CASH', 'Cheque', 'DD', 'M.O'].map(mode => (
+                <option key={mode} value={mode}>{mode}</option>
+              ))}
+            </select>
+          </div>
 
           {/* Book items */}
           <h3 style={{ margin: '0 0 8px', color: '#5c3d2e', fontSize: 16 }}>Select Volumes</h3>
