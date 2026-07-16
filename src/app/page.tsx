@@ -118,6 +118,10 @@ interface Toast {
 const App: NextPage = () => {
   const [activeTab, setActiveTab] = useState<'form' | 'search' | 'records' | 'analytics'>('form');
   const [invoiceCounter, setInvoiceCounter] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showLogin, setShowLogin] = useState(true);
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginError, setLoginError] = useState('');
   
   // Form state
   const [form, setForm] = useState({
@@ -254,11 +258,24 @@ const App: NextPage = () => {
   };
 
   const handleLoadAll = async () => {
+    if (!isLoggedIn) return;
     const all = await getSubmissions();
     setAllRecords(all);
   };
 
+  const handleLogin = () => {
+    if (loginForm.username === 'yoga' && loginForm.password === 'yoga123bd') {
+      setIsLoggedIn(true);
+      setShowLogin(false);
+      setLoginError('');
+      addToast('✓ Signed in');
+    } else {
+      setLoginError('Invalid username or password');
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
+    if (!isLoggedIn) return;
     e.preventDefault();
     setSubmitting(true);
     
@@ -307,6 +324,56 @@ const App: NextPage = () => {
           </div>
         ))}
       </div>
+
+      {/* Login Modal */}
+      {showLogin && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', padding: 32, borderRadius: 12, width: 320,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }}>
+            <h2 style={{ margin: '0 0 20px', color: '#5c3d2e', fontSize: 20, textAlign: 'center' }}>
+              Bharatha Darshana
+            </h2>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Username</label>
+              <input
+                type="text"
+                value={loginForm.username}
+                onChange={e => setLoginForm({ ...loginForm, username: e.target.value })}
+                placeholder="Enter username"
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                style={loginInputStyle}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Password</label>
+              <input
+                type="password"
+                value={loginForm.password}
+                onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
+                placeholder="Enter password"
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                style={loginInputStyle}
+              />
+            </div>
+            {loginError && <p style={{ color: '#e74c3c', fontSize: 13, textAlign: 'center', margin: '0 0 12px' }}>{loginError}</p>}
+            <button
+              onClick={handleLogin}
+              style={{
+                width: '100%', padding: 10, border: 'none', borderRadius: 6,
+                background: '#5c3d2e', color: '#fff', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 24, borderBottom: '2px solid #d4a574', paddingBottom: 16 }}>
@@ -643,6 +710,13 @@ const App: NextPage = () => {
       )}
     </div>
   );
+};
+
+// Style helpers
+const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#7a6555', display: 'block', marginBottom: 4 };
+const loginInputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', border: '1px solid #ccc', borderRadius: 6,
+  fontSize: 14, boxSizing: 'border-box', background: '#fff',
 };
 
 // Reusable input component
